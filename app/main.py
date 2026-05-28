@@ -1,6 +1,7 @@
+import asyncio
+import hashlib
 import time
-from hashlib import sha256
-
+from concurrent.futures import ProcessPoolExecutor
 
 PASSWORDS_TO_BRUTE_FORCE = [
     "b4061a4bcfe1a2cbf78286f3fab2fb578266d1bd16c414c650c5ac04dfc696e1",
@@ -17,16 +18,48 @@ PASSWORDS_TO_BRUTE_FORCE = [
 
 
 def sha256_hash_str(to_hash: str) -> str:
-    return sha256(to_hash.encode("utf-8")).hexdigest()
+    return hashlib.sha256(to_hash.encode("utf-8")).hexdigest()
 
 
-def brute_force_password() -> None:
-    pass
+def brute_force_password(start: int, end: int, target_hash: set) -> list:
+    results = []
+    for num in range(start, end):
+        password = f"{num:08d}"
+        generated_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        if generated_hash in target_hash:
+            results.append((password, generated_hash))
+
+    return results
+
+
+async def main():
+    target_hashes = set(PASSWORDS_TO_BRUTE_FORCE)
+    with ProcessPoolExecutor() as executor:
+        loop = asyncio.get_running_loop()
+        tasks = []
+        TOTAL_COMBINATIONS = 100_000_000
+        NUM_CHUNKS = 4
+        CHUNK_SIZE = TOTAL_COMBINATIONS // NUM_CHUNKS
+        for i in range(NUM_CHUNKS):
+            start = i * CHUNK_SIZE
+            end = start + CHUNK_SIZE
+            tasks.append(
+                loop.run_in_executor(
+                    executor, brute_force_password, start, end, target_hashes
+                )
+            )
+
+        print("starting brute-force attack...")
+        results = await asyncio.gather(*tasks)
+        print("Brute-force attack completed. Results:")
+        for result in results:
+            for password, hash_value in result:
+                print(f"Password: {password}, Hash: {hash_value}")
 
 
 if __name__ == "__main__":
     start_time = time.perf_counter()
-    brute_force_password()
+    asyncio.run(main())
     end_time = time.perf_counter()
 
     print("Elapsed:", end_time - start_time)
